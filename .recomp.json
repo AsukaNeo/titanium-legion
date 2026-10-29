@@ -1,0 +1,38 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Steel Battalion",
+  "wikidata": "Q3497777",
+  "system": "Xbox",
+  "type": "recomp",
+  "original": {
+    "region": "USA",
+    "revision": "1",
+    "sha1": "338b3e1022f6e4e6a55aee430e091af8113f660e"
+  },
+  "project": "Titanium Legion",
+  "status": "in-progress",
+  "targets": [
+    "Windows"
+  ],
+  "toolchain": "Xboxrecomp",
+  "approach": "Static recompilation of the XBE to C with xboxrecomp; NV2A pushbuffers drawn by a Direct3D 11 back end with the CPU rasteriser as fallback; a virtual Steel Battalion controller played from a pad and the keyboard",
+  "started": "2026-10-28",
+  "maintainers": [
+    {
+      "name": "AsukaNeo",
+      "link": "https://github.com/AsukaNeo"
+    }
+  ],
+  "links": [
+    {
+      "label": "Source",
+      "url": "https://github.com/AsukaNeo/titanium-legion"
+    }
+  ],
+  "help": [
+    "Shadow maps and float depth on the GPU (the cockpit runs at 5-7 fps)",
+    "Hand-testing the pad and keyboard mapping",
+    "Passthrough for a real Steel Battalion controller"
+  ],
+  "notes": "Pre-alpha. Campaign reaches Mission 00: the cockpit start-up, walking, the main monitor's view and combat work, and the mission plays through to the story scenes. Not playable yet: 5-7 fps in the cockpit, and the controls have only been driven by script."
+}

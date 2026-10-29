@@ -1,0 +1,46 @@
+# derived from the game: never commit
+src/recomp/gen/
+game/
+game_files/
+texdump/
+*.xbe
+*.iso
+*.xiso
+*.bmp
+*.png
+*.jpg
+*.wav
+*.bik
+*.log
+prof*.txt
+# build output
+build/
+build-release/
+dist/
+# local backups
+*.pre_*
+*.bak*
+# F12 captures from the game window (game-derived)
+screenshots/
+# project art is allowed
+!assets/
+!assets/*.png
+# your settings, written by the settings overlay (F10)
+titaniumlegion.ini
+# frame dumps from runs (game-derived)
+shots/
+# the game's saves (E:\UDATA, E:\TDATA), written beside the game
+saves/
+mods/
+# build_level_menu.py and zaxis_port.py caches, local build notes
+tools/__pycache__/
+build-status.txt
+*.stderr
+# ./run.sh output
+logs/
+# xbox_kernel.log and similar run output
+xbox_kernel.log
+shadercache/
+# the logo originals as dropped in (copies are titanium-legion-logo*.png)
+assets/e8f4d7b2-*.png
+assets/f1401bb5-*.png
