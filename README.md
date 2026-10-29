@@ -4,8 +4,7 @@
 
 # Titanium Legion
 
-A static recompilation of *Steel Battalion* (Capcom, 2002, original Xbox, USA,
-title 43430002 v1) on xboxrecomp.
+A static recompilation of *Steel Battalion* (Xbox) on xboxrecomp.
 
 > **Pre-alpha.** There are no builds. It reaches the first mission and plays
 > it, but at 5-7 fps in the cockpit, and the controls have only been driven
@@ -17,8 +16,7 @@ repository.
 
 ## Status
 
-- Boots through the Capcom, Nude Maker and Dolby logos to the title screen,
-  drawn on the GPU renderer.
+- Boots, but not yet playable.
 - A virtual Steel Battalion controller sits on port 1 (the toolkit's
   `RECOMP_USB_SB=0`), played from a pad and the keyboard (`src/sb_input.c`).
   The game accepts it and lights its lamps. Main Weapon gets past the title
@@ -172,3 +170,22 @@ they land in `screenshots/`.
   texture that only runs into a target's first rows through. Whether the
   two land next to each other depends on the heap, so it came and went
   between runs.
+
+## Credits
+
+- **[xboxrecomp](https://github.com/sp00nznet/xboxrecomp)** by sp00nz and contributors, the base this project is built on
+- **[xemu](https://github.com/xemu-project/xemu)**, the reference for Xbox hardware behaviour (see [NOTICE](NOTICE))
+- **[Exonerated](https://github.com/AsukaNeo/Exonerated)**, the *Deathrow* port this one follows
+- A professional coder's input throughout
+
+## AI assistance
+
+AI (**Claude Opus 5.5**) was used as a development assistant for the intensely time-consuming recompilation work, to make this project a reality sooner. Human-made decompilation projects are the gold standard. View the use of AI in this project in whatever way feels most appropriate to you.
+
+## Legal
+
+MIT licence (see [LICENSE](LICENSE) and [NOTICE](NOTICE)), covering this project's own code only. Titanium-Legion is an independent fan project, not affiliated with the rights holders of *Steel Batallion*, or with Microsoft. Those games, their music, Xbox and related marks belong to their owners. No game code, data, music or assets are included: the program and its setup work only from your own copies.
+
+<p align="center">
+  <img src="assets/asukaneo-mark.png" alt="AsukaNeo" width="96">
+</p>
