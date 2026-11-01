@@ -24,9 +24,7 @@ So this is ours to build. Two things from others help with it:
 
 ## Do next
 
-1. **Lifter fix: jump tables indexed downward.** MSVC's `memcpy`/`memmove` jump through a table indexed *below* its address. Our disassembler counts upward and decodes the rest of the table as instructions; on another title that cut `memcpy` short.
-   - Source: xenophobentx/xboxrecomp (Takedawn's toolkit) commit `0a7d117`, about 40 lines in `tools/disasm/engine.py`. MIT.
-   - Our toolkit copy doesn't have it. Needs a re-lift.
+1. **Lifter: jump tables indexed downward -- already covered.** MSVC's `memcpy`/`memmove` jump through a table indexed *below* its address. Takedawn's toolkit fixed this in commit `0a7d117`; ours already has the same fix from upstream (`c576d24`, "Measure jump tables down from the displacement as well as up": the `back` loop and `_jt_base` in `tools/disasm/engine.py`). Checked 2026-11-01 in every toolkit copy; nothing to do. (An earlier version of this note said otherwise.)
 2. **Pad + keyboard together, and scripted input:**
    - **Remapping references:** THPS 2X's toolkit `src/input/xinput_bind.c`, which is pure logic, keyboard and pads, with a lock-out rule so menus stay usable. Burnout 2's `src/input.cpp` has four players and full analog range. Both MIT.
    - **Steel Battalion's controller** has far more controls than a pad, so a text binding format like THPS 2X's (`control:source+source,...`) scales better than fixed tables.
