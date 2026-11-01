@@ -13,7 +13,7 @@
  *   Base addr:   0x00010000
  *   Entry point: 0x00192C47
  *   Sections:    78 (.text, D3D, XGRPH, DSOUND, BINK*, XPP, .rdata, .data,
- *                seg00-seg50 (mission data, loaded on demand), DOLBY, ...)
+ *                seg00-seg50 (mission data, loaded on demand), audio DSP, ...)
  *   Kernel imports: 123
  */
 
@@ -154,7 +154,7 @@ static void tl_default_env(void)
         { "RECOMP_PRESENT_ON_CLEAR","1" },
         /* Reads on a handle opened without FILE_SYNCHRONOUS_IO return
          * STATUS_PENDING, as a DVD read always did. The loader reads
-         * capcom.xpr that way and waits on a flag only its pending branch
+         * its first archive that way and waits on a flag only its pending branch
          * sets: answered synchronously, it waits forever (0x000C84C1). */
         { "RECOMP_ASYNC_IO",        "1" },
     };

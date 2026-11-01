@@ -32,7 +32,7 @@
   "help": [
     "Shadow maps and float depth on the GPU (the cockpit runs at 5-7 fps)",
     "Hand-testing the pad and keyboard mapping",
-    "Passthrough for a real Steel Battalion controller"
+    "Supporting the original controller and HOTAS-style setups"
   ],
-  "notes": "Pre-alpha. Campaign reaches Mission 00: the cockpit start-up, walking, the main monitor's view and combat work, and the mission plays through to the story scenes. Not playable yet: 5-7 fps in the cockpit, and the controls have only been driven by script."
+  "notes": "Pre-alpha. Keyboard and gamepad first; support for the original controller or HOTAS-style setups is a later goal. Campaign reaches Mission 00: the cockpit start-up, walking, the main monitor's view and combat work, and the mission plays through to the story scenes. Not playable yet: 5-7 fps in the cockpit, and the controls have only been driven by script."
 }

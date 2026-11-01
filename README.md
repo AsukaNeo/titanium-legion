@@ -63,6 +63,12 @@ pad it builds from the report).
 
 ## Controls
 
+The plan is a keyboard and gamepad experience first: the pad flies the VT
+and the keyboard works the panel, so the game can be played without its
+original controller. Later, the hope is to find a way to support the
+original controller itself, and HOTAS-style setups (stick, throttle and
+pedals) mapped onto the same virtual controller.
+
 On the pad, the fight:
 
 | Pad | Controller |
@@ -148,7 +154,7 @@ they land in `screenshots/`.
 
 ## Notes for this title
 
-- `RECOMP_ASYNC_IO=1` is built in. The loader reads `capcom.xpr` through an
+- `RECOMP_ASYNC_IO=1` is built in. The loader reads its first archive through an
   asynchronous handle and only finishes if the read went pending. A read
   answered synchronously hangs it forever at `0x000C84C1`.
 - D3D's device pointer is `0x0021AFE0`; the fence fields are at +0x30/+0x34

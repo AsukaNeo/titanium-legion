@@ -4,7 +4,8 @@ set -eo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 XBE="$ROOT/game/default.xbe"
 # Code sections besides .text: the XDK libraries and Bink. seg00-seg50 are
-# mission data (no code), loaded with XeLoadSection, and DOLBY is DSP code.
+# mission data (no code), loaded with XeLoadSection, and the audio section
+# holds DSP code.
 SECTIONS=D3D,XGRPH,DSOUND,XPP,BINK,BINK32,BINK32A,BINK16,BINK4444,BINK5551,BINKYUY2,BINK16MX,BINK16X2,BINK16M,BINK32MX,BINK32X2,BINK32M
 # Loops that wait on hardware: their back edges yield (RECOMP_SPIN_WAIT) and
 # call tl_spin_wait_hook (recomp_manual.c). None known yet.

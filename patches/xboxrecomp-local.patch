@@ -15073,7 +15073,7 @@ index efa5046..2807594 100644
  
          /* One done queue per pass, covering all three lists.
 diff --git a/src/usb/usb_gamepad.c b/src/usb/usb_gamepad.c
-index bd00f3f..d9360c5 100644
+index bd00f3f..d8525a6 100644
 --- a/src/usb/usb_gamepad.c
 +++ b/src/usb/usb_gamepad.c
 @@ -57,6 +57,112 @@ static uint8_t s_configuration[USB_GAMEPAD_MAX];
@@ -15082,7 +15082,7 @@ index bd00f3f..d9360c5 100644
  
 +/* ---- the Steel Battalion controller ------------------------------------ */
 +
-+/* Capcom's controller for Steel Battalion: another XID device, type 0x80,
++/* The Steel Battalion controller: another XID device, type 0x80,
 + * with a 26-byte input report (39 buttons, five levers and sticks' worth of
 + * axes, three pedals, a tuner dial and a gear lever) and a 22-byte output
 + * report that sets its lamps. What the title's XPP accepts is read from
