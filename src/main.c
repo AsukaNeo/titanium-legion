@@ -157,6 +157,12 @@ static void tl_default_env(void)
          * its first archive that way and waits on a flag only its pending branch
          * sets: answered synchronously, it waits forever (0x000C84C1). */
         { "RECOMP_ASYNC_IO",        "1" },
+        /* The HUD is lines. On the CPU each batch of them wrote the GPU's
+         * surfaces back, over a hundred times a second. */
+        { "RECOMP_GPU_LINES",       "1" },
+        /* The shadow pass biases its depth with polygon offset (1.55, 0.006);
+         * without it the ground shadows itself. */
+        { "RECOMP_POFS",            "1" },
     };
     size_t i;
     for (i = 0; i < sizeof defaults / sizeof defaults[0]; i++)

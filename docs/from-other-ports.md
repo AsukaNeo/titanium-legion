@@ -6,15 +6,15 @@ Titanium Legion is MIT, so code may come only from MIT (or compatible) projects,
 
 ## The frame-rate work: nobody has it yet
 
-The cockpit runs at 5–7 fps because the shadow-map pass (depth only, float Z16), the scene pass sampling it with the NV2A's shadow compare, and the float-depth back-buffer draws all go to the CPU.
+Done 2026-11-01: the shadow-map pass (depth only, float Z16), the scene pass sampling it with the NV2A's shadow compare, and the float-depth back-buffer draws all run on the GPU now, so the cockpit went from 5–7 fps to about 30. This section stays as the record of what was checked.
 
-As of 2026-11-01, **no other renderer implements shadow compare or float depth on the GPU**. Checked:
+As of 2026-11-01, **no other renderer implemented shadow compare or float depth on the GPU**. Checked:
 - THPS 2X's Vulkan renderer (`nv2a_vk`);
 - apexJCL's D3D11 and Metal back ends;
 - Takedawn's D3D11 and Vulkan back ends;
 - antbox's new `nvr` renderer.
 
-So this is ours to build. Two things from others help with it:
+So it was ours to build. Two things from others could still help:
 
 - **Frame capture and replay** (antbox `src/nvr/nvr_capture.[ch]`, `tools/nvr_replay`, MIT). It records every pushbuffer kick plus the guest pages the title changed, then replays the frames headless through any back end and compares pixels. Capture Mission 00's cockpit once, then iterate on the GPU path without driving the game to the engine start every time.
 - **Depth formats and bias**, from THPS 2X's lessons (`docs/lessons_learned.md` in almost-drowned-rat/xboxrecomp-vulkan):

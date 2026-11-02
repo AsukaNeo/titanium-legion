@@ -7,8 +7,8 @@
 A static recompilation of *Steel Battalion* (Xbox) on xboxrecomp.
 
 > **Pre-alpha.** There are no builds. It reaches the first mission and plays
-> it, but at 5-7 fps in the cockpit, and the controls have only been driven
-> by script. Not playable yet.
+> it at about 30 fps, but the controls have only been driven by script. Not
+> playable yet.
 
 You need your own copy of the game: `default.xbe` must match SHA-1
 `338b3e1022f6e4e6a55aee430e091af8113f660e`. Nothing from the game is in this
@@ -32,11 +32,11 @@ repository.
   end and on into the story scenes and the next sortie.
 - Bink movies play.
 - The main monitor shows the outside view.
-- Open: 5-7 fps in the cockpit. Nearly all the drawing left on the CPU is
-  the shadow map (a depth-only pass into a 2048x2048 float Z16 buffer, then
-  sampled with the NV2A's depth compare) and the cockpit's quads, refused
-  for float depth; the GPU back end has neither yet. The pad and keyboard
-  have only been driven by script, not by hand.
+- The cockpit runs at the game's 30 fps (29-30 walking through Mission 00,
+  from 6.7), with everything drawn on the GPU: float depth, the depth-only
+  shadow pass, the shadow compare and the HUD's lines.
+- Open: the pad and keyboard have only been driven by script, not by hand.
+  The shadows have not been compared with real hardware.
 
 ## Starting the VT
 
@@ -121,8 +121,8 @@ The toolkit sits next to this folder in `../xboxrecomp`: upstream
 the Steel Battalion controller in `src/usb/usb_gamepad.c` (and a guard in
 `ohci.c` so its lamp report isn't taken for rumble), cooperative thread
 suspend, FATX overwrite semantics, the infinite-w clamp for the Bink movies,
-16-bit colour targets on the GPU, and the neighbouring-texture case in
-`nv2a_gpu_d3d11.cpp`.
+16-bit colour targets, float depth, depth-only passes and the shadow compare
+on the GPU, and the neighbouring-texture case in `nv2a_gpu_d3d11.cpp`.
 
 ```bash
 git clone -b v0.16.0 https://github.com/sp00nznet/xboxrecomp ../xboxrecomp
@@ -168,6 +168,14 @@ they land in `screenshots/`.
   (`[obj+0x15E]`) at `0x2DCE28`/`3C`/`50`. They're reached only through an
   object's update pointer (`+0x14C`), so the sweep misses them; they're
   seeded.
+- The whole depth buffer is float Z16 (control0 bit 12, range 0-511.9375). The
+  shadow map is one too, 2048x2048 with no colour target, sampled as format
+  0x31 in a projective stage with `SET_SHADOW_DEPTH_FUNC` 4: lit where the
+  map's depth is greater than the coordinate's. The back end holds float Z16
+  as z/511.9375 in D32_FLOAT and never reads it back to guest memory. The
+  pass biases itself with polygon offset, so `RECOMP_POFS=1` is built in.
+- The HUD is drawn with lines. `RECOMP_GPU_LINES=1` (built in) sends them to
+  the GPU; on the CPU each batch wrote every GPU surface back to guest memory.
 - The main monitor is composited into a 512x512 target from the view
   (another 512x512 target) and a 200x200 noise target whose last rows run
   into the composite target's first ones (pitch 832, packed 0x28000 bytes
