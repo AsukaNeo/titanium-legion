@@ -14,6 +14,19 @@
  * does the rest, the panel you work through before a sortie: hatch,
  * ignition, start, the five toggle switches, comms, the tuner and eject.
  *
+ * Start is also "the next start-up step": it works whichever control the
+ * game is blinking for (guide_update), so the start-up can be done from the
+ * pad alone, and held at the diagnostics bars it presses when they are all
+ * past the marker. Tab or RB+Back shows the controls (sb_help.c), F9 or
+ * RB+Start the pilot view, F8 turns the prompts off.
+ *
+ * That is the classic layout. The simple one (the default; F7 or
+ * TL_CONTROLS=classic for the other) changes the pad once the engine runs:
+ * the left stick walks, with the gears following its travel, and pulled back
+ * brakes and then reverses (drive); RT and LT are Main Weapon and Lock On, A
+ * is Fire. Menus and the start-up keep the classic layout, since the game's
+ * menus want the sight-change stick and Main Weapon.
+ *
  * Keys come from the game's window (xbox_FramebufferKeyDown), so they only
  * count while it has the focus. The pad is read with XInput directly, not
  * through the toolkit's pad layer, which would fold the keyboard in as a
@@ -84,14 +97,17 @@ static int stick(SHORT v)
 
 /* A step holds buttons and may also push levers: AXP AXN AYP AYN (aiming
  * lever), ROTP ROTN (rotation lever), SXP SXN SYP SYN (sight change) to
- * full travel (P the positive end), PL PM PR (left, middle, right pedal) to the floor. GR GN G1-G5
+ * full travel (P the positive end), DRP DRN the simple layout's left stick,
+ * RT LT its triggers, PL PM PR (left, middle, right pedal) to the floor. GR GN G1-G5
  * put the gear lever there and T<n> turns the tuner to n; both stay. */
-enum { AX_AIM_X, AX_AIM_Y, AX_ROT, AX_SIGHT_X, AX_SIGHT_Y, AX_COUNT };
+enum { AX_AIM_X, AX_AIM_Y, AX_ROT, AX_SIGHT_X, AX_SIGHT_Y, AX_DRIVE, AX_COUNT };
 
 typedef struct {
     uint64_t bits;
     int8_t axis[AX_COUNT];
     uint8_t pedals;                 /* 1 left, 2 middle, 4 right */
+    uint8_t step, view, card;       /* STEP VIEW CARD: Start, F9, RB+Back */
+    uint8_t rt, lt;                 /* RT LT: the triggers, full */
 } ScriptOut;
 
 #define SCRIPT_MAX 256
@@ -110,8 +126,14 @@ static int script_token(const char *p, size_t n, int k)
         {"AYN", AX_AIM_Y, -1}, {"ROTP", AX_ROT, 1}, {"ROTN", AX_ROT, -1},
         {"SXP", AX_SIGHT_X, 1}, {"SXN", AX_SIGHT_X, -1},
         {"SYP", AX_SIGHT_Y, 1}, {"SYN", AX_SIGHT_Y, -1},
+        {"DRP", AX_DRIVE, 1}, {"DRN", AX_DRIVE, -1},
     };
     size_t i;
+    if (n == 4 && !_strnicmp(p, "STEP", 4)) { s_script[k].out.step = 1; return 1; }
+    if (n == 4 && !_strnicmp(p, "VIEW", 4)) { s_script[k].out.view = 1; return 1; }
+    if (n == 4 && !_strnicmp(p, "CARD", 4)) { s_script[k].out.card = 1; return 1; }
+    if (n == 2 && !_strnicmp(p, "RT", 2)) { s_script[k].out.rt = 1; return 1; }
+    if (n == 2 && !_strnicmp(p, "LT", 2)) { s_script[k].out.lt = 1; return 1; }
     if (n && p[0] >= '0' && p[0] <= '9') {
         unsigned long b = strtoul(p, NULL, 10);
         if (b < 39)
@@ -294,32 +316,353 @@ static void script_apply(ScriptOut *o)
         }
         o->bits |= s_script[i].out.bits;
         o->pedals |= s_script[i].out.pedals;
+        o->step |= s_script[i].out.step;
+        o->view |= s_script[i].out.view;
+        o->card |= s_script[i].out.card;
+        o->rt |= s_script[i].out.rt;
+        o->lt |= s_script[i].out.lt;
         for (a = 0; a < AX_COUNT; a++)
             if (s_script[i].out.axis[a])
                 o->axis[a] = s_script[i].out.axis[a];
     }
 }
 
+/* ---- the start-up guide ------------------------------------------------- */
+
+/* Guest addresses: the mode flag (0 in a mission, not in menus), the
+ * diagnostics bars, their marker. */
+#define G_MODE   0x3B9400
+#define G_BARS   0x55D8DC
+#define G_MARKER 0x55D984
+
+/* The part of the 640x480 frame that is the main monitor's window, for the
+ * pilot view. */
+#define VIEW_X 105.0f
+#define VIEW_Y 59.0f
+#define VIEW_W 430.0f
+#define VIEW_H 242.0f
+
+extern void xbox_FramebufferSetCrop(float x, float y, float w, float h);
+
+static TlSbGuide s_guide = { TL_STEP_NONE, 0, -1, 0, 1, 0 };
+static DWORD s_lamp_seen[40];       /* when each lamp last changed brightness */
+static uint8_t s_lamp_last[40];
+static enum {
+    S_OUTSIDE, S_HATCH, S_IGNITION, S_SWITCHES, S_BOOTING, S_START,
+    S_ENGINE, S_RUNNING
+} s_stage;
+static int s_accelerated, s_engine_fired, s_engine_tried, s_start_pressed;
+static unsigned s_flipped;          /* switches turned on during the checklist */
+static int s_auto_flip;             /* Start flipping them: next one, or 0 */
+static DWORD s_auto_at;
+
+const TlSbGuide *tl_sb_guide(void)
+{
+    return &s_guide;
+}
+
+static const uint8_t *guest(void)
+{
+    extern ptrdiff_t g_xbox_mem_offset;
+    return (const uint8_t *)g_xbox_mem_offset;
+}
+
+/* Blinking now: it changed in the last second and is still lit. */
+static int lamp_asking(int lamp, DWORD now)
+{
+    return s_lamp_seen[lamp] && now - s_lamp_seen[lamp] < 1000 && tl_sb_lamp(lamp);
+}
+
+static float bars_min(float *marker)
+{
+    const uint8_t *m = guest();
+    float b[5], low;
+    int i;
+    memcpy(b, m + G_BARS, sizeof b);
+    memcpy(marker, m + G_MARKER, sizeof *marker);
+    low = b[0];
+    for (i = 1; i < 5; i++)
+        if (b[i] < low)
+            low = b[i];
+    return low;
+}
+
+/* The start-up only goes forwards: the lamps run across the whole panel while
+ * the systems boot, so a lamp alone at some moment means nothing unless it is
+ * the one due next. A menu starts it over. */
+static void guide_update(DWORD now)
+{
+    static DWORD ask_until;
+    static int ask_held = -1;
+    float marker, low;
+    int i, asking = 0, only = -1;
+
+    for (i = 0; i < 40; i++) {
+        int v = tl_sb_lamp(i);
+        if (v != s_lamp_last[i]) {
+            s_lamp_last[i] = (uint8_t)v;
+            s_lamp_seen[i] = now;
+        }
+    }
+    /* The gear lamps (30 up) only say where the lever is. */
+    for (i = 0; i < 30; i++)
+        if (lamp_asking(i, now)) {
+            asking++;
+            only = i;
+        }
+
+    if (*(const uint32_t *)(guest() + G_MODE) != 0) {
+        s_stage = S_OUTSIDE;
+        s_accelerated = s_engine_tried = s_start_pressed = 0;
+        s_flipped = 0;
+        s_auto_flip = 0;
+        ask_held = -1;
+    }
+    low = bars_min(&marker);
+
+    switch (s_stage) {
+    case S_OUTSIDE:
+        if (*(const uint32_t *)(guest() + G_MODE) == 0 && asking == 1 && only == 1)
+            s_stage = S_HATCH;
+        break;
+    case S_HATCH:
+        if (asking == 1 && only == 2)
+            s_stage = S_IGNITION;
+        break;
+    case S_IGNITION:
+        if (now - s_lamp_seen[2] > 1500 && !tl_sb_lamp(2)) {
+            s_stage = S_SWITCHES;
+            s_flipped = 0;
+        }
+        break;
+    case S_SWITCHES:
+        if (asking)                     /* the lamps start to run */
+            s_stage = S_BOOTING;
+        break;
+    case S_BOOTING:
+        if (asking == 1 && only == 3)
+            s_stage = S_START;
+        break;
+    case S_START:
+        /* The Start lamp blinks on through the diagnostics, so the bars are
+         * what says the first press is over. */
+        if (s_start_pressed && marker > 0.3f && low < 0.99f)
+            s_stage = S_ENGINE;
+        break;
+    case S_ENGINE:
+        if (s_engine_tried && low >= 0.99f)
+            s_stage = S_RUNNING;
+        break;
+    default:
+        break;
+    }
+
+    s_guide.step = s_stage == S_HATCH ? TL_STEP_HATCH
+                 : s_stage == S_IGNITION ? TL_STEP_IGNITION
+                 : s_stage == S_SWITCHES ? TL_STEP_SWITCHES
+                 : s_stage == S_START ? TL_STEP_START
+                 : s_stage == S_ENGINE ? TL_STEP_ENGINE
+                 : s_stage == S_RUNNING && !s_accelerated
+                     ? (s_gear < 1 && s_guide.classic ? TL_STEP_SHIFT : TL_STEP_ACCELERATE)
+                 : TL_STEP_NONE;
+
+    /* In a fight, one or two lamps blinking is the game asking; the whole
+     * panel flashing is an alarm. A lamp fades out between blinks, so the
+     * prompt stays up a moment. */
+    if (s_stage == S_RUNNING && s_accelerated && asking >= 1 && asking <= 2
+        && (only == 0 || only > 3)) {
+        ask_held = only;
+        ask_until = now + 1500;
+    } else if (now > ask_until) {
+        ask_held = -1;
+    }
+    s_guide.ask_lamp = ask_held;
+    {
+        int n = 0;
+        for (i = 0; i < 5; i++)
+            n += (s_flipped >> i) & 1;
+        s_guide.switches = n;
+        {
+            static int shown = -1, shown_stage = -1;
+            if (s_guide.step != shown || s_stage != shown_stage) {
+                shown = s_guide.step;
+                shown_stage = s_stage;
+                fprintf(stderr, "  [SB] guide stage %d step %d\n", s_stage, shown);
+            }
+        }
+    }
+}
+
+/* Start: the control the game is waiting for, or Start itself. Returns the
+ * button to press this poll, or -1. */
+static int step_button(int start_down, DWORD now)
+{
+    static int held;
+    int pressed = start_down && !held;
+    float marker;
+
+    held = start_down;
+    switch (s_guide.step) {
+    case TL_STEP_HATCH:
+        return start_down ? SB_HATCH : -1;
+    case TL_STEP_IGNITION:
+        return start_down ? SB_IGNITION : -1;
+    case TL_STEP_SWITCHES:
+        if (pressed && !s_auto_flip) {
+            s_auto_flip = 1;
+            s_auto_at = now;
+        }
+        return -1;
+    case TL_STEP_ENGINE:
+        /* Neutral, and only when all five are past the marker. */
+        if (!start_down) {
+            s_engine_fired = 0;
+            return -1;
+        }
+        s_gear = 0;
+        s_engine_tried = 1;
+        if (!s_engine_fired && bars_min(&marker) > marker + 0.03f)
+            s_engine_fired = 1;
+        return s_engine_fired ? SB_START : -1;
+    default:
+        s_engine_fired = 0;
+        if (start_down && s_guide.step == TL_STEP_START)
+            s_start_pressed = 1;
+        return start_down ? SB_START : -1;
+    }
+}
+
+/* Start's run through the switches: an already-on one goes off first, since
+ * only flipping one on during the checklist counts. */
+static void auto_flip(DWORD now)
+{
+    int k;
+    if (!s_auto_flip || now - s_auto_at < 250)
+        return;
+    s_auto_at = now;
+    k = s_auto_flip - 1;
+    if (s_guide.step != TL_STEP_SWITCHES || k >= 5) {
+        s_auto_flip = 0;
+        return;
+    }
+    if (s_flipped & (1u << k)) {
+        s_auto_flip++;
+    } else if (s_toggle[k]) {
+        s_toggle[k] = 0;
+    } else {
+        s_toggle[k] = 1;
+        s_flipped |= 1u << k;
+        s_auto_flip++;
+    }
+}
+
+/* ---- the simple layout's left stick ------------------------------------- */
+
+#define GEAR_STEP_MS 800            /* a gear at a time, as a hand would */
+#define REVERSE_MS   1200           /* pulled back this long: stopped, so reverse */
+
+/* The layout in force on the pad right now. */
+static int simple_live(void)
+{
+    return !s_guide.classic && s_stage == S_RUNNING;
+}
+
+/* `y` is the stick, -127..127: sets the gear and the pedals. */
+static void drive(int y, unsigned *middle, unsigned *right, DWORD now)
+{
+    static DWORD gear_at, back_since;
+    int mag = y < 0 ? -y : y;
+    /* stick() leaves nothing under 31, so travel starts there. */
+    unsigned travel = mag > 31 ? (unsigned)(mag - 31) * 65535u / 96u : 0;
+    int want;
+
+    if (y >= 0)
+        back_since = 0;
+    else if (!back_since)
+        back_since = now;
+
+    if (y < 0 && now - back_since >= REVERSE_MS) {
+        s_gear = -1;
+        *right = travel;
+        return;
+    }
+    if (y < 0) {
+        *middle = travel;               /* the brake, until it has stopped */
+        return;
+    }
+    if (s_gear < 0)
+        s_gear = 1;
+    if (y == 0 && s_gear == 0)
+        return;                         /* still in neutral from the start-up */
+    want = travel < 23000 ? 1 : travel < 36000 ? 2 : travel < 46000 ? 3
+         : travel < 56000 ? 4 : 5;
+    if (s_gear < 1)
+        s_gear = 1;
+    if (s_gear != want && now - gear_at >= GEAR_STEP_MS) {
+        s_gear += s_gear < want ? 1 : -1;
+        gear_at = now;
+    }
+    /* Most of the pedal by half way: the gear is what sets the pace. */
+    travel *= 2;
+    *right = travel > 65535u ? 65535u : travel;
+}
+
+/* The saved layout: [controls] scheme in the ini beside the exe. */
+static void ini_path(char *path, size_t n)
+{
+    const char *v = getenv("RECOMP_INI");
+    char *slash;
+    if (v && *v) {
+        snprintf(path, n, "%s", v);
+        return;
+    }
+    GetModuleFileNameA(NULL, path, (DWORD)n);
+    slash = strrchr(path, '\\');
+    if (slash)
+        snprintf(slash + 1, n - (size_t)(slash + 1 - path), "titaniumlegion.ini");
+}
+
+static void scheme_load(void)
+{
+    const char *v = getenv("TL_CONTROLS");
+    char path[MAX_PATH], val[16];
+    if (v && *v) {
+        s_guide.classic = !_stricmp(v, "classic");
+        return;
+    }
+    ini_path(path, sizeof path);
+    GetPrivateProfileStringA("controls", "scheme", "simple", val, sizeof val, path);
+    s_guide.classic = !_stricmp(val, "classic");
+}
+
+static void scheme_save(void)
+{
+    char path[MAX_PATH];
+    ini_path(path, sizeof path);
+    WritePrivateProfileStringA("controls", "scheme", s_guide.classic ? "classic" : "simple", path);
+}
+
 /* ---- the report --------------------------------------------------------- */
 
 /* Pad buttons with and without RB held. */
-static const struct { WORD button; int bit, shifted; } s_pad_map[] = {
-    { XINPUT_GAMEPAD_A,              SB_MAIN_WEAPON,  SB_CHAFF },
-    { XINPUT_GAMEPAD_B,              SB_FIRE,         SB_EXTINGUISHER },
-    { XINPUT_GAMEPAD_X,              SB_LOCK_ON,      SB_NIGHT_SCOPE },
-    { XINPUT_GAMEPAD_Y,              SB_MAGAZINE,     SB_OVERRIDE },
-    { XINPUT_GAMEPAD_DPAD_LEFT,      SB_ZOOM_IN,      SB_ZOOM_IN },
-    { XINPUT_GAMEPAD_DPAD_RIGHT,     SB_ZOOM_OUT,     SB_ZOOM_OUT },
-    { XINPUT_GAMEPAD_START,          SB_START,        SB_START },
-    { XINPUT_GAMEPAD_BACK,           SB_MULTIMON_OPEN, SB_MULTIMON_OPEN },
-    { XINPUT_GAMEPAD_LEFT_THUMB,     SB_WASHING,      SB_WASHING },
-    { XINPUT_GAMEPAD_RIGHT_THUMB,    SB_SIGHT_CHANGE, SB_SIGHT_CHANGE },
+static const struct { WORD button; int bit, shifted, simple; } s_pad_map[] = {
+    { XINPUT_GAMEPAD_A,              SB_MAIN_WEAPON,  SB_CHAFF,        SB_FIRE },
+    { XINPUT_GAMEPAD_B,              SB_FIRE,         SB_EXTINGUISHER, SB_WEAPON_SUB },
+    { XINPUT_GAMEPAD_X,              SB_LOCK_ON,      SB_NIGHT_SCOPE,  SB_WEAPON_MAIN },
+    { XINPUT_GAMEPAD_Y,              SB_MAGAZINE,     SB_OVERRIDE,     SB_MAGAZINE },
+    { XINPUT_GAMEPAD_DPAD_UP,        -1,              -1,              SB_MAP_ZOOM },
+    { XINPUT_GAMEPAD_DPAD_DOWN,      -1,              -1,              SB_SUB_MONITOR },
+    { XINPUT_GAMEPAD_DPAD_LEFT,      SB_ZOOM_IN,      SB_ZOOM_IN,      SB_ZOOM_IN },
+    { XINPUT_GAMEPAD_DPAD_RIGHT,     SB_ZOOM_OUT,     SB_ZOOM_OUT,     SB_ZOOM_OUT },
+    { XINPUT_GAMEPAD_BACK,           SB_MULTIMON_OPEN, -1,             SB_MULTIMON_OPEN },
+    { XINPUT_GAMEPAD_LEFT_THUMB,     SB_WASHING,      SB_WASHING,      SB_WASHING },
+    { XINPUT_GAMEPAD_RIGHT_THUMB,    SB_SIGHT_CHANGE, SB_SIGHT_CHANGE, SB_SIGHT_CHANGE },
 };
 
 /* Keys held for a button. Eject is Shift+Backspace, below. */
 static const struct { int vk, bit; } s_key_map[] = {
     { VK_SPACE, SB_MAIN_WEAPON },
-    { 'H', SB_HATCH }, { 'I', SB_IGNITION }, { VK_RETURN, SB_START },
+    { 'H', SB_HATCH }, { 'I', SB_IGNITION },
     { 'M', SB_MULTIMON_OPEN }, { 'N', SB_MAP_ZOOM }, { 'B', SB_MODE_SELECT },
     { 'V', SB_SUB_MONITOR }, { 'F', SB_FSS }, { 'G', SB_MANIPULATOR },
     { 'C', SB_LINE_COLOR }, { 'W', SB_WASHING }, { 'X', SB_EXTINGUISHER },
@@ -349,13 +692,17 @@ static void sb_fill(int pad, uint8_t *report)
 
     if (g) {
         shift = (g->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0;
-        for (i = 0; i < sizeof s_pad_map / sizeof s_pad_map[0]; i++)
-            if (g->wButtons & s_pad_map[i].button)
-                set_bit(report, shift ? s_pad_map[i].shifted : s_pad_map[i].bit);
+        for (i = 0; i < sizeof s_pad_map / sizeof s_pad_map[0]; i++) {
+            int bit = shift ? s_pad_map[i].shifted
+                    : simple_live() ? s_pad_map[i].simple : s_pad_map[i].bit;
+            if ((g->wButtons & s_pad_map[i].button) && bit >= 0)
+                set_bit(report, bit);
+        }
         rot = stick(g->sThumbLX);
         /* The left stick's Y is the sight-change stick's, which sits on the
          * left lever: it is also what moves the menus. */
-        sight_y = stick(g->sThumbLY);
+        if (!simple_live())
+            sight_y = stick(g->sThumbLY);
         if (shift) {
             sight_x = stick(g->sThumbRX);
             sight_y = stick(g->sThumbRY);
@@ -365,8 +712,10 @@ static void sb_fill(int pad, uint8_t *report)
         }
         if (g->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER)
             left = 0xFFFF;
-        middle = g->bLeftTrigger * 257u;
-        right = g->bRightTrigger * 257u;
+        if (!simple_live()) {
+            middle = g->bLeftTrigger * 257u;
+            right = g->bRightTrigger * 257u;
+        }
     }
 
     for (i = 0; i < sizeof s_key_map / sizeof s_key_map[0]; i++)
@@ -376,10 +725,10 @@ static void sb_fill(int pad, uint8_t *report)
         set_bit(report, SB_EJECT);
 
     /* The levers and dials that stay put. */
-    if (edge(0, (g && (g->wButtons & XINPUT_GAMEPAD_DPAD_UP)) || key(VK_PRIOR))
+    if (edge(0, (g && !simple_live() && (g->wButtons & XINPUT_GAMEPAD_DPAD_UP)) || key(VK_PRIOR))
         && s_gear < 5)
         s_gear++;
-    if (edge(1, (g && (g->wButtons & XINPUT_GAMEPAD_DPAD_DOWN)) || key(VK_NEXT))
+    if (edge(1, (g && !simple_live() && (g->wButtons & XINPUT_GAMEPAD_DPAD_DOWN)) || key(VK_NEXT))
         && s_gear > -1)
         s_gear--;
     if (edge(2, key(VK_OEM_6)))                     /* ] */
@@ -388,13 +737,58 @@ static void sb_fill(int pad, uint8_t *report)
         s_tuner = (s_tuner + 15) & 15;
     for (b = 0; b < 5; b++) {
         static const int vk[5] = { '6', '7', '8', '9', '0' };
-        if (edge(4 + b, key(vk[b])))
+        if (edge(4 + b, key(vk[b]))) {
             s_toggle[b] = !s_toggle[b];
+            if (s_toggle[b] && s_guide.step == TL_STEP_SWITCHES)
+                s_flipped |= 1u << b;
+        }
         if (s_toggle[b])
             set_bit(report, SB_TOGGLE_FILTER + b);
     }
 
     script_apply(&sc);
+
+    /* The window's help: Tab held or RB+Back for the card, F9 or RB+Start
+     * for the pilot view, F8 for the prompts. */
+    {
+        DWORD now = GetTickCount();
+        int pad_start = g && (g->wButtons & XINPUT_GAMEPAD_START) != 0;
+        int pad_back = g && (g->wButtons & XINPUT_GAMEPAD_BACK) != 0;
+        static int card_latched;
+        int step;
+
+        guide_update(now);
+        auto_flip(now);
+        if (edge(10, (shift && pad_back) || sc.card))
+            card_latched = !card_latched;
+        s_guide.card = card_latched || key(VK_TAB);
+        if (edge(11, key(VK_F8)))
+            s_guide.hints = !s_guide.hints;
+        if (edge(13, key(VK_F7))) {
+            s_guide.classic = !s_guide.classic;
+            scheme_save();
+        }
+        if (edge(12, key(VK_F9) || (shift && pad_start) || sc.view))
+            s_guide.view = !s_guide.view;
+        if (s_guide.view && s_stage != S_OUTSIDE)
+            xbox_FramebufferSetCrop(VIEW_X, VIEW_Y, VIEW_W, VIEW_H);
+        else
+            xbox_FramebufferSetCrop(0, 0, 0, 0);
+        step = step_button((pad_start && !shift) || key(VK_RETURN) || sc.step, now);
+        if (step >= 0)
+            set_bit(report, step);
+        if (simple_live()) {
+            int y = sc.axis[AX_DRIVE] ? sc.axis[AX_DRIVE] : g && !shift ? stick(g->sThumbLY) : 0;
+            drive(y, &middle, &right, now);
+            if ((g && g->bRightTrigger > 40) || sc.rt)
+                set_bit(report, SB_MAIN_WEAPON);
+            if ((g && g->bLeftTrigger > 40) || sc.lt)
+                set_bit(report, SB_LOCK_ON);
+        }
+        if (s_guide.step == TL_STEP_ACCELERATE && (right > 0x4000 || (sc.pedals & 4)))
+            s_accelerated = 1;
+    }
+
     for (b = 0; b < 39; b++)
         if (sc.bits & (1ull << b))
             set_bit(report, b);
@@ -491,4 +885,6 @@ void tl_sb_input_init(void)
 {
     g_xbox_sb_input_hook = sb_fill;
     g_xbox_sb_lamps_hook = sb_lamps;
+    scheme_load();
+    tl_sb_help_init();
 }

@@ -27,4 +27,26 @@ void tl_sb_input_init(void);
 /* Lamp `lamp` (0-39) as the game last set it, 0-15. */
 int tl_sb_lamp(int lamp);
 
+/* Where the start-up has got to, worked out from the lamps and the game's
+ * own state, for the prompts (sb_help.c) and the Start button. */
+enum {
+    TL_STEP_NONE, TL_STEP_HATCH, TL_STEP_IGNITION, TL_STEP_SWITCHES,
+    TL_STEP_START, TL_STEP_ENGINE, TL_STEP_SHIFT, TL_STEP_ACCELERATE
+};
+
+typedef struct {
+    int step;
+    int switches;       /* of the five, flipped on during the checklist */
+    int ask_lamp;       /* a lamp the game is blinking in a fight, or -1 */
+    int card;           /* the controls card is up */
+    int hints;          /* prompts are on */
+    int view;           /* the pilot view is on */
+    int classic;        /* the controller's own layout, not the simple one */
+} TlSbGuide;
+
+const TlSbGuide *tl_sb_guide(void);
+
+/* Install the prompts and the controls card over the frame (sb_help.c). */
+void tl_sb_help_init(void);
+
 #endif /* TL_SB_INPUT_H */

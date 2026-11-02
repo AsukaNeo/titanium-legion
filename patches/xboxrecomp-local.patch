@@ -15526,7 +15526,7 @@ index 331d2e2..ce3fdbe 100644
  target_include_directories(xbox_video PUBLIC
      ${CMAKE_CURRENT_SOURCE_DIR}
 diff --git a/src/video/fb_present.c b/src/video/fb_present.c
-index 3430107..dc349d6 100644
+index 3430107..d9b54a6 100644
 --- a/src/video/fb_present.c
 +++ b/src/video/fb_present.c
 @@ -7,28 +7,84 @@
@@ -15770,7 +15770,7 @@ index 3430107..dc349d6 100644
      InterlockedExchange(&s_present_idx, next);
  }
  
-@@ -222,76 +264,346 @@ void xbox_FramebufferWindowFrameStats(uint32_t draws)
+@@ -222,76 +264,385 @@ void xbox_FramebufferWindowFrameStats(uint32_t draws)
      InterlockedExchange(&s_frame_draws, (LONG)draws);
  }
  
@@ -15986,7 +15986,10 @@ index 3430107..dc349d6 100644
 +    if (s_cfg.sharpen < 0) s_cfg.sharpen = 0;
 +    if (s_cfg.sharpen > 100) s_cfg.sharpen = 100;
 +    s_cfg.fxaa = cfg_int("RECOMP_FXAA", "fxaa", 0) != 0;
-+    cfg_str("RECOMP_FRAME_GEN", "frame_gen", "off", buf, sizeof buf);
++    {   /* RECOMP_FRAME_GEN_DEFAULT: a title's default, for when the ini is silent */
++        const char *fg_default = getenv("RECOMP_FRAME_GEN_DEFAULT");
++        cfg_str("RECOMP_FRAME_GEN", "frame_gen", fg_default ? fg_default : "off", buf, sizeof buf);
++    }
 +    s_cfg.frame_gen = !_stricmp(buf, "motion") || !strcmp(buf, "2") ? FG_MOTION
 +                    : !_stricmp(buf, "blend") || !strcmp(buf, "1") ? FG_BLEND : FG_OFF;
 +    fprintf(stderr, "  [FBWIN] image: anisotropy %d sharpen %d fxaa %d frame_gen %s\n",
@@ -16033,6 +16036,42 @@ index 3430107..dc349d6 100644
 +    *x = (cw - *w) / 2;
 +    *y = (ch - *h) / 2;
 +}
++
++/* A part of the frame to fill the window with, in frame pixels: its whole
++ * width shows, with as much height as the window's shape allows around its
++ * centre. The rest is simply off-screen, so nothing about the frame changes.
++ * Width 0 is the whole frame. Any thread. */
++static volatile float s_crop_x, s_crop_y, s_crop_w, s_crop_h;
++
++void xbox_FramebufferSetCrop(float x, float y, float w, float h)
++{
++    s_crop_x = x; s_crop_y = y; s_crop_h = h;
++    s_crop_w = w;
++}
++
++static void crop_rect(int cw, int ch, int *x, int *y, int *w, int *h)
++{
++    float cx = s_crop_x, cy = s_crop_y, cropw = s_crop_w, croph = s_crop_h, k, top, shown;
++    if (cropw <= 0.0f || croph <= 0.0f || cw < 1 || ch < 1)
++        return;
++    k = (float)cw / cropw;
++    shown = (float)ch / k;
++    top = cy + croph * 0.5f - shown * 0.5f;
++    if (top < 0.0f)
++        top = 0.0f;
++    if (top + shown > (float)s_fb_height)
++        top = (float)s_fb_height - shown;
++    *w = (int)((float)s_fb_width * k + 0.5f);
++    *h = (int)((float)s_fb_height * k + 0.5f);
++    *x = (int)(-cx * k);
++    *y = (int)(-top * k);
++}
++
++/* A title's own layer over the frame, for the help it wants to show: called
++ * on the presenting thread each frame with a window-sized BGRA image and a DC
++ * on it. Returns 0 to hide the layer, 1 to show it as it stands, 2 when it
++ * has just repainted it (GDI leaves alpha at zero, so it sets alpha too). */
++int (*g_xbox_fb_layer_hook)(HDC dc, uint32_t *bits, int w, int h);
 +
 +/* ---- window ------------------------------------------------------------- */
 +
@@ -16148,7 +16187,7 @@ index 3430107..dc349d6 100644
 +            if (!(l & (1 << 30)))
 +                InterlockedExchange(&s_ov_key, VK_F10);
 +            return 0;
-+        }
+         }
 +        if ((w == VK_RETURN && m == WM_SYSKEYDOWN && (l & (1 << 29)))
 +            || w == VK_F11) {
 +            if (!(l & (1 << 30)))
@@ -16159,7 +16198,7 @@ index 3430107..dc349d6 100644
 +            if (!(l & (1 << 30)))
 +                InterlockedExchange(&s_want_screenshot, 1);
 +            return 0;
-         }
++        }
 +        if ((s_ov_open || s_launcher) && m == WM_KEYDOWN) {
 +            /* The overlay (or the launcher) has the keyboard; arrows repeat. */
 +            InterlockedExchange(&s_ov_key, (LONG)w);
@@ -16169,7 +16208,7 @@ index 3430107..dc349d6 100644
          /* RECOMP_KEY_TRACE: each key as it arrives, edge-triggered.
           *
           * The obvious diagnostic -- sampling which keys are held, once a
-@@ -313,43 +625,23 @@ static LRESULT CALLBACK fb_wndproc(HWND h, UINT m, WPARAM w, LPARAM l)
+@@ -313,43 +664,23 @@ static LRESULT CALLBACK fb_wndproc(HWND h, UINT m, WPARAM w, LPARAM l)
      case WM_KEYUP:
      case WM_SYSKEYUP:
          xbox_InputKeySet((int)w, 0);
@@ -16224,7 +16263,7 @@ index 3430107..dc349d6 100644
      }
      return DefWindowProcA(h, m, w, l);
  }
-@@ -435,210 +727,2496 @@ int xbox_FramebufferDumpBmp(const char *path)
+@@ -435,210 +766,2592 @@ int xbox_FramebufferDumpBmp(const char *path)
      return 0;
  }
  
@@ -16284,6 +16323,13 @@ index 3430107..dc349d6 100644
 +}
 +
 +static void ov_status(const char *msg)
++{
++    snprintf(s_ov.status, sizeof s_ov.status, "%s", msg);
++    s_ov.status_until = GetTickCount() + 3000;
++    s_ov.dirty = 1;
++}
++
++static void ov_set_open(int on)
  {
 -    static LONG lw, lh;
 -    RECT c;
@@ -16291,13 +16337,6 @@ index 3430107..dc349d6 100644
 -    GetClientRect(hwnd, &c);
 -    cw = c.right - c.left; ch = c.bottom - c.top;
 -    if (cw <= 0 || ch <= 0)
-+    snprintf(s_ov.status, sizeof s_ov.status, "%s", msg);
-+    s_ov.status_until = GetTickCount() + 3000;
-+    s_ov.dirty = 1;
-+}
-+
-+static void ov_set_open(int on)
-+{
 +    if (s_launcher || on == (s_ov_open != 0))
          return;
 -    if (cw != lw || ch != lh) {
@@ -16760,8 +16799,6 @@ index 3430107..dc349d6 100644
 -    th = CreateThread(NULL, 0, fb_thread, NULL, 0, NULL);
 -    if (th)
 -        CloseHandle(th);
--    else
--        InterlockedExchange(&s_fb_running, 0);
 +    }
 +    s_ov.dirty = 1;
 +}
@@ -17538,7 +17575,11 @@ index 3430107..dc349d6 100644
 +    "    float3 b = tb.SampleLevel(sl, uv + (1.0 - ft) * v, 0).rgb;\n" \
 +    "    float3 d = abs(a - b);\n" \
 +    "    float w = saturate(1.5 - 8.0 * max(d.r, max(d.g, d.b)));\n" \
-+    "    return float4(lerp(bl, lerp(a, b, ft), w), 1);\n" \
++    /* A pixel the same in both frames stays put, whatever moved around it: a \
++     * cockpit's HUD lines over a turning world would be carried off with it. */ \
++    "    float3 e = abs(a0 - b0);\n" \
++    "    float still = saturate(2.0 - 25.0 * max(e.r, max(e.g, e.b)));\n" \
++    "    return float4(lerp(lerp(bl, lerp(a, b, ft), w), bl, still), 1);\n" \
 +    "}\n"
 +
 +/* One full-screen triangle sampling the frame. Sharp bilinear is nearest
@@ -17594,6 +17635,9 @@ index 3430107..dc349d6 100644
 +    ID3D11Texture2D         *ov_tex;
 +    ID3D11ShaderResourceView *ov_srv;
 +    int                      ov_w, ov_h;
++    ID3D11Texture2D         *layer_tex;
++    ID3D11ShaderResourceView *layer_srv;
++    int                      layer_w, layer_h;
 +    /* Post-processing: the passes, and two frame-sized targets they
 +     * ping-pong between. */
 +    ID3D11PixelShader       *ps_cas, *ps_fxaa;
@@ -17695,6 +17739,7 @@ index 3430107..dc349d6 100644
 +    SAFE_RELEASE(d3d.smp[0]); SAFE_RELEASE(d3d.smp[1]);
 +    SAFE_RELEASE(d3d.pso); SAFE_RELEASE(d3d.blend);
 +    SAFE_RELEASE(d3d.ov_srv); SAFE_RELEASE(d3d.ov_tex);
++    SAFE_RELEASE(d3d.layer_srv); SAFE_RELEASE(d3d.layer_tex);
 +    d3d.ov_w = d3d.ov_h = 0;
 +    d3d_post_free();
 +    SAFE_RELEASE(d3d.ps_cas); SAFE_RELEASE(d3d.ps_fxaa);
@@ -18317,6 +18362,89 @@ index 3430107..dc349d6 100644
 +static int  s_fg_shown;
 +static LONG s_fg_presents;
 +
++/* The title's layer: a DIB the hook paints, copied up when it repaints. */
++static void layer_draw(int cw, int ch)
++{
++    static HDC dc;
++    static HBITMAP bmp;
++    static uint32_t *bits;
++    static int bw, bh;
++    D3D11_VIEWPORT vp;
++    D3D11_MAPPED_SUBRESOURCE map;
++    int state, row;
++
++    if (cw < 1 || ch < 1)
++        return;
++    if (bw != cw || bh != ch) {
++        BITMAPINFO bi;
++        if (!dc) dc = CreateCompatibleDC(NULL);
++        memset(&bi, 0, sizeof bi);
++        bi.bmiHeader.biSize = sizeof bi.bmiHeader;
++        bi.bmiHeader.biWidth = cw;
++        bi.bmiHeader.biHeight = -ch;
++        bi.bmiHeader.biPlanes = 1;
++        bi.bmiHeader.biBitCount = 32;
++        bi.bmiHeader.biCompression = BI_RGB;
++        {
++            uint32_t *fresh = NULL;
++            HBITMAP made = CreateDIBSection(NULL, &bi, DIB_RGB_COLORS, (void **)&fresh, NULL, 0);
++            if (!made)
++                return;
++            SelectObject(dc, made);
++            if (bmp) DeleteObject(bmp);
++            bmp = made;
++            bits = fresh;
++        }
++        bw = cw; bh = ch;
++    }
++    state = g_xbox_fb_layer_hook(dc, bits, cw, ch);
++    if (!state)
++        return;
++    if (!d3d.layer_tex || d3d.layer_w != cw || d3d.layer_h != ch) {
++        D3D11_TEXTURE2D_DESC od;
++        SAFE_RELEASE(d3d.layer_srv);
++        SAFE_RELEASE(d3d.layer_tex);
++        memset(&od, 0, sizeof od);
++        od.Width = (UINT)cw;
++        od.Height = (UINT)ch;
++        od.MipLevels = 1;
++        od.ArraySize = 1;
++        od.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++        od.SampleDesc.Count = 1;
++        od.Usage = D3D11_USAGE_DYNAMIC;
++        od.BindFlags = D3D11_BIND_SHADER_RESOURCE;
++        od.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
++        if (FAILED(ID3D11Device_CreateTexture2D(d3d.dev, &od, NULL, &d3d.layer_tex))
++            || FAILED(ID3D11Device_CreateShaderResourceView(d3d.dev,
++                          (ID3D11Resource *)d3d.layer_tex, NULL, &d3d.layer_srv))) {
++            SAFE_RELEASE(d3d.layer_srv);
++            SAFE_RELEASE(d3d.layer_tex);
++            return;
++        }
++        d3d.layer_w = cw;
++        d3d.layer_h = ch;
++        state = 2;
++    }
++    if (state == 2
++        && SUCCEEDED(ID3D11DeviceContext_Map(d3d.ctx, (ID3D11Resource *)d3d.layer_tex,
++                                             0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
++        GdiFlush();
++        for (row = 0; row < ch; row++)
++            memcpy((uint8_t *)map.pData + (size_t)row * map.RowPitch,
++                   bits + (size_t)row * cw, (size_t)cw * 4);
++        ID3D11DeviceContext_Unmap(d3d.ctx, (ID3D11Resource *)d3d.layer_tex, 0);
++    }
++    memset(&vp, 0, sizeof vp);
++    vp.Width = (float)cw; vp.Height = (float)ch;
++    vp.MaxDepth = 1.0f;
++    ID3D11DeviceContext_RSSetViewports(d3d.ctx, 1, &vp);
++    ID3D11DeviceContext_PSSetShader(d3d.ctx, d3d.pso, NULL, 0);
++    ID3D11DeviceContext_PSSetShaderResources(d3d.ctx, 1, 1, &d3d.layer_srv);
++    ID3D11DeviceContext_OMSetBlendState(d3d.ctx, d3d.blend, NULL, 0xFFFFFFFFu);
++    ID3D11DeviceContext_Draw(d3d.ctx, 3, 0);
++    ID3D11DeviceContext_OMSetBlendState(d3d.ctx, NULL, NULL, 0xFFFFFFFFu);
++}
++
 +/* Upload s_rgb and draw it letterboxed. Returns the Present result. */
 +static HRESULT d3d_present(HWND hwnd)
 +{
@@ -18361,6 +18489,7 @@ index 3430107..dc349d6 100644
 +
 +    GetClientRect(hwnd, &cr);
 +    fit_rect(cr.right, cr.bottom, &x, &y, &w, &h);
++    crop_rect(cr.right, cr.bottom, &x, &y, &w, &h);
 +    memset(&vp, 0, sizeof vp);
 +    vp.TopLeftX = (float)x; vp.TopLeftY = (float)y;
 +    vp.Width = (float)w;    vp.Height = (float)h;
@@ -18395,6 +18524,10 @@ index 3430107..dc349d6 100644
 +     * exactly, and sharpening or FXAA moves pixels near edges off it. */
 +    xbox_PvideoDrawD3D11(d3d.dev, d3d.ctx, srv, (float)x, (float)y, (float)w, (float)h,
 +                         s_fb_width, s_fb_height);
++
++    /* The title's layer. */
++    if (g_xbox_fb_layer_hook && !s_launcher && d3d.pso && d3d.blend)
++        layer_draw(cr.right, cr.bottom);
 +
 +    /* The overlay, over the whole client area at its own resolution. */
 +    if (ov_visible() && d3d.pso && d3d.blend) {
@@ -18853,10 +18986,10 @@ index 3430107..dc349d6 100644
 +    th = CreateThread(NULL, 0, fb_thread, NULL, 0, NULL);
 +    if (th)
 +        CloseHandle(th);
-+    else
-+        InterlockedExchange(&s_fb_running, 0);
-+}
-+
+     else
+         InterlockedExchange(&s_fb_running, 0);
+ }
+ 
 +/* The launcher: open the window on a title card -- the project's wordmark
 + * (RECOMP_TITLE_CARD), Play, Settings and Exit to Windows, the version and
 + * the author's mark (RECOMP_TITLE_MARK) -- and return once Play is chosen.
@@ -18895,8 +19028,8 @@ index 3430107..dc349d6 100644
 +{
 +    cfg_load_once();
 +    return s_cfg.gpu;
- }
- 
++}
++
  #endif /* _WIN32: POSIX hosts get the SDL2 window in fb_present_sdl.c */
 diff --git a/src/video/fb_present_sdl.c b/src/video/fb_present_sdl.c
 index 87b7ef7..2a10f70 100644

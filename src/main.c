@@ -163,6 +163,8 @@ static void tl_default_env(void)
         /* The shadow pass biases its depth with polygon offset (1.55, 0.006);
          * without it the ground shadows itself. */
         { "RECOMP_POFS",            "1" },
+        /* The game draws 30 a second in a mission. F10 turns this off. */
+        { "RECOMP_FRAME_GEN_DEFAULT", "motion" },
     };
     size_t i;
     for (i = 0; i < sizeof defaults / sizeof defaults[0]; i++)

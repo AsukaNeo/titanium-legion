@@ -35,10 +35,19 @@ repository.
 - The cockpit runs at the game's 30 fps (29-30 walking through Mission 00,
   from 6.7), with everything drawn on the GPU: float depth, the depth-only
   shadow pass, the shadow compare and the HUD's lines.
+- Frame generation is on by default (`[display] frame_gen`, F10): the game
+  runs at its own 30 a second and the window shows made frames up to the
+  display's refresh, one game frame later. Pixels the same in both frames stay
+  put, so the HUD isn't carried off with a turning world.
 - Open: the pad and keyboard have only been driven by script, not by hand.
   The shadows have not been compared with real hardware.
 
 ## Starting the VT
+
+A prompt at the bottom of the screen walks you through this, and **Start**
+(pad) or **Enter** works whichever step is due: hatch, ignition, all five
+switches, Start, and, held at the bars, the engine, pressed for you when all
+five are past the marker. F8 turns the prompts off. By hand:
 
 1. Close the **cockpit hatch** (H).
 2. Press **Ignition** (I). The main monitor shows the five-switch checklist.
@@ -69,7 +78,32 @@ original controller. Later, the hope is to find a way to support the
 original controller itself, and HOTAS-style setups (stick, throttle and
 pedals) mapped onto the same virtual controller.
 
-On the pad, the fight:
+Hold Tab, or press RB+Back, for a card of all of it in the game.
+
+On the pad, the simple layout, once the engine is running (the default; F7
+switches to the classic layout below, and it is remembered as `[controls]
+scheme` in `titaniumlegion.ini`):
+
+| Pad | Controller |
+|---|---|
+| Left stick up | Walk: the gears follow the stick's travel, a gear at a time |
+| Left stick down | Brake, then after about a second reverse |
+| Left stick left / right | Rotation lever |
+| Right stick | Aiming lever |
+| RT / LT / LB | Main weapon / Lock on / Slide step |
+| A | Sub weapon (Fire) |
+| X / B / Y | Weapon con main / sub / Magazine change |
+| D-pad up / down | Map zoom / Sub monitor mode |
+| D-pad left / right | Main monitor zoom in / out |
+| RB + right stick | Sight change |
+| RB + A / B / X / Y | Chaff / Extinguisher / Night scope / Override |
+| Left / right stick click | Washing / Sight change |
+| Back | Multi-monitor open-close |
+
+Menus and the start-up use the classic layout, since the menus move on the
+sight-change stick.
+
+On the pad, the classic layout, the fight:
 
 | Pad | Controller |
 |---|---|
@@ -82,14 +116,22 @@ On the pad, the fight:
 | RB + A / B / X / Y | Chaff / Extinguisher / Night scope / Override |
 | D-pad up / down | Gear up / down (R, N, 1-5) |
 | D-pad left / right | Main monitor zoom in / out |
-| Start / Back | Start / Multi-monitor open-close |
+| Start | The next start-up step, or Start |
+| Back | Multi-monitor open-close |
+| RB + Back | The controls card |
+| RB + Start | Pilot view |
 | Left / right stick click | Washing / Sight change |
 
 On the keyboard, the panel:
 
 | Key | Controller |
 |---|---|
-| H, I, Enter | Cockpit hatch, Ignition, Start |
+| H, I | Cockpit hatch, Ignition |
+| Enter | The next start-up step, or Start |
+| Tab (hold) | The controls card |
+| F9 | Pilot view: the main monitor fills the window, without the lower panel |
+| F8 | Prompts on / off |
+| F7 | Simple / classic layout |
 | Shift+Backspace | Eject |
 | 6 7 8 9 0 | Toggle switches: filter control, oxygen supply, fuel flow rate, buffer material, VT location |
 | 1-5 | Comm 1-5 |

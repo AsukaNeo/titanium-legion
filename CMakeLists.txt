@@ -22,6 +22,7 @@ add_executable(${PROJECT_NAME} WIN32
     src/main.c
     src/recomp_manual.c          # hand-written replacements for game functions
     src/sb_input.c               # the Steel Battalion controller from a pad and keyboard
+    src/sb_help.c                # the prompts and the controls card over the frame
     src/game_check.c             # is this the supported default.xbe?
     src/game_import.c            # first-run setup from a disc image or folder
     src/xiso.c                   # Xbox disc image reader
