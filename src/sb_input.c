@@ -95,6 +95,22 @@ static int stick(SHORT v)
     return x < -127 ? -127 : x;
 }
 
+/* The aiming lever on a stick: travel past the dead zone, squared, so a small
+ * move is a small correction, up to [controls] aim_sensitivity percent of the
+ * lever at the stick's edge. stick() alone starts at a quarter of the lever. */
+static int s_aim_percent = 70;
+
+static int stick_aim(SHORT v)
+{
+    int x = stick(v), mag = x < 0 ? -x : x, out;
+    float t;
+    if (!x)
+        return 0;
+    t = (float)(mag - 31) / 96.0f;
+    out = (int)(t * t * 127.0f * (float)s_aim_percent / 100.0f + 0.5f);
+    return x < 0 ? -out : out;
+}
+
 /* ---- scripted presses -------------------------------------------------- */
 
 /* A step holds buttons and may also push levers: AXP AXN AYP AYN (aiming
@@ -634,12 +650,14 @@ static void scheme_load(void)
 {
     const char *v = getenv("TL_CONTROLS");
     char path[MAX_PATH], val[16];
+    ini_path(path, sizeof path);
+    s_aim_percent = GetPrivateProfileIntA("controls", "aim_sensitivity", s_aim_percent, path);
+    s_aim_percent = s_aim_percent < 10 ? 10 : s_aim_percent > 100 ? 100 : s_aim_percent;
     if (v && *v) {
         s_guide.classic = !_stricmp(v, "classic");
         s_guide.hints = !s_guide.classic;
         return;
     }
-    ini_path(path, sizeof path);
     GetPrivateProfileStringA("controls", "scheme", "simple", val, sizeof val, path);
     s_guide.classic = !_stricmp(val, "classic");
     s_guide.hints = !s_guide.classic;
@@ -741,8 +759,8 @@ static void sb_fill(int pad, uint8_t *report)
             sight_x = stick(g->sThumbRX);
             sight_y = stick(g->sThumbRY);
         } else {
-            aim_x = stick(g->sThumbRX);
-            aim_y = stick(g->sThumbRY);
+            aim_x = stick_aim(g->sThumbRX);
+            aim_y = stick_aim(g->sThumbRY);
         }
         /* The menus move on the sight-change stick, across too: the name
          * grid at pilot entry needs it. */
@@ -896,11 +914,16 @@ static void sb_fill(int pad, uint8_t *report)
 
 static uint8_t s_lamps[20];
 
+/* The game's own report buffer, not what reached the controller: a report can
+ * stay pending for good (status 0x3E5 at 0x4AF800), and then the hook below
+ * hears nothing more while the game goes on blinking. */
+#define G_LAMPS 0x4AF842
+
 int tl_sb_lamp(int lamp)
 {
-    if (lamp < 0 || lamp >= 40)
+    if (lamp < 0 || lamp >= 40 || !guest())
         return 0;
-    return (s_lamps[lamp / 2] >> ((lamp & 1) * 4)) & 15;
+    return (guest()[G_LAMPS + lamp / 2] >> ((lamp & 1) * 4)) & 15;
 }
 
 /* TL_SB_LAMP_LOG=1 prints the lamps whenever they change, as 40 hex
@@ -919,7 +942,7 @@ static void sb_lamps(int pad, const uint8_t *lamps, int n)
         int i;
         memcpy(s_lamps, lamps, (size_t)n);
         for (i = 0; i < 40; i++)
-            line[i] = "0123456789ABCDEF"[tl_sb_lamp(i)];
+            line[i] = "0123456789ABCDEF"[(s_lamps[i / 2] >> ((i & 1) * 4)) & 15];
         line[40] = 0;
         fprintf(stderr, "  [SB] lamps %s\n", line);
     }
