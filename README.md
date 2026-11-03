@@ -6,9 +6,11 @@
 
 A static recompilation of *Steel Battalion* (Xbox) on xboxrecomp.
 
-> **Pre-alpha.** There are no builds. It reaches the first mission and plays
-> it at about 30 fps, but the controls have only been driven by script. Not
-> playable yet.
+> **Pre-alpha preview.** A build is on the
+> [releases page](https://github.com/AsukaNeo/titanium-legion/releases). The
+> first mission plays at about 30 fps on a normal pad with
+> [Easy Pilot](#easy-pilot), but it is rough: see the known problems under
+> [Status](#status).
 
 You need your own copy of the game: `default.xbe` must match SHA-1
 `338b3e1022f6e4e6a55aee430e091af8113f660e`. Nothing from the game is in this
@@ -16,7 +18,7 @@ repository.
 
 ## Status
 
-- Boots, but not yet playable.
+- Pre-alpha: Campaign and Mission 00 play on a normal pad, with rough edges.
 - A virtual Steel Battalion controller sits on port 1 (the toolkit's
   `RECOMP_USB_SB=0`), played from a pad and the keyboard (`src/sb_input.c`).
   The game accepts it and lights its lamps. Main Weapon gets past the title
@@ -39,8 +41,51 @@ repository.
   runs at its own 30 a second and the window shows made frames up to the
   display's refresh, one game frame later. Pixels the same in both frames stay
   put, so the HUD isn't carried off with a turning world.
-- Open: the pad and keyboard have only been driven by script, not by hand.
-  The shadows have not been compared with real hardware.
+- The pad has had one person's hand-testing, on one controller: pilot entry,
+  the start-up, walking and aiming. The classic layout, and most of the keyboard
+  panel, have only been driven by script.
+- Known problems:
+  - The second start-up in one run can get stuck at the Start step. Closing the
+    game and loading your pilot again gets you back in.
+  - The continue menu doesn't draw correctly.
+  - The frame rate can drop to the low 20s.
+  - With all 8 pilot slots full, or a blank pilot name, the screen dims and
+    nothing says why.
+  - The shadows have not been compared with real hardware.
+
+## Easy Pilot
+
+The game was built for a 40-button controller with three pedals. Easy Pilot
+plays it on a normal pad, and it is on by default: the left stick walks and picks
+the gears for you, the triggers fire and lock on, and prompts walk you through
+the start-up.
+
+To turn it off, change the **Easy Pilot** row on the title card or in the F10
+settings, or press F7. That brings back the classic layout and takes the prompts
+away. The choice is remembered as `[controls] scheme` in `titaniumlegion.ini`.
+
+From the title card to walking:
+
+1. Choose **Play**, then press **A** or **Start** at the game's title.
+2. Choose **CAMPAIGN**, then **LIST AS NEW** for a new pilot or **LISTED PILOT**
+   for a saved one. In menus the left stick or d-pad moves, **A** or **Start**
+   accepts, and **X** goes back.
+3. For a new pilot, pick each letter of the name and accept it, go down to
+   **COMPLETE**, then accept the birth date and **YES**. Pick the mission: the
+   pilot is only saved at this point, so quitting earlier loses it.
+4. Press **Start** to skip the intro movie.
+5. In the cockpit, follow the prompt at the bottom of the screen and press
+   **Start** for each step: hatch, ignition, switches and systems.
+6. When the five diagnostics bars rise and fall, **hold Start**. It presses for
+   you the moment all five are past the marker, and the engine starts.
+7. Push the **left stick** up to walk, further for a higher gear. Pull it back to
+   brake, and keep it back to reverse.
+8. Aim with the **right stick**, fire with **RT** and lock on with **LT**. Hold
+   **Tab** or press **RB+Back** for a card of every control.
+
+The right stick starts gently and speeds up towards its edge. If aiming feels too
+slow or too fast, set `aim_sensitivity` under `[controls]` in `titaniumlegion.ini`,
+from 10 to 100 (the default is 70).
 
 ## Starting the VT
 
