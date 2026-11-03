@@ -401,6 +401,7 @@ static void tl_portable_saves(const char *old_dir)
 }
 
 extern void xbox_LauncherRun(const char *version);
+extern void tl_sb_options_init(void); /* sb_input.c */
 extern int xbox_FramebufferWindowGpu(void);
 
 static void tl_launcher(void)
@@ -719,6 +720,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
             return 1;
         }
     }
+    tl_sb_options_init();
     tl_launcher();
 
     /* Step 2: Initialize Xbox memory layout */

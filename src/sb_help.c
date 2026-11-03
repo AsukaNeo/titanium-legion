@@ -100,7 +100,9 @@ static const Row s_panel[] = {
     {"This card", "RB + Back", "Tab (hold)"},
     {"Pilot view", "RB + Start", "F9"},
     {"Prompts on / off", "-", "F8"},
-    {"Simple / classic layout", "-", "F7"},
+    {"Easy Pilot on / off", "-", "F7"},
+    {"Menus: move", "Left stick, D-pad", "Arrows"},
+    {"Menus: OK / back", "A, Start / X", "Enter, Space / Bksp"},
     {"Settings", "-", "F10"},
 };
 
@@ -171,7 +173,7 @@ static void paint_card(HDC dc, uint32_t *bits, int w, int h)
     fill_alpha(bits, w, h, &all, 0x0A100C, 0xE6);
     SetBkMode(dc, TRANSPARENT);
     old = (HFONT)SelectObject(dc, bold);
-    text(dc, tl_sb_guide()->classic ? "CONTROLS: CLASSIC" : "CONTROLS: SIMPLE",
+    text(dc, tl_sb_guide()->classic ? "CONTROLS: CLASSIC" : "CONTROLS: EASY PILOT",
          side, top, w - 2 * side, row, DT_LEFT, INK);
     if (tl_sb_guide()->classic)
         table(dc, "The fight", s_fight, nf, side, top + row + row / 2, col, row, plain, bold);

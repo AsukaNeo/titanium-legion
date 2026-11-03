@@ -47,7 +47,8 @@ repository.
 A prompt at the bottom of the screen walks you through this, and **Start**
 (pad) or **Enter** works whichever step is due: hatch, ignition, all five
 switches, Start, and, held at the bars, the engine, pressed for you when all
-five are past the marker. F8 turns the prompts off. By hand:
+five are past the marker. The prompts come with Easy Pilot (see below); F8
+turns them on or off until the next run. By hand:
 
 1. Close the **cockpit hatch** (H).
 2. Press **Ignition** (I). The main monitor shows the five-switch checklist.
@@ -80,9 +81,10 @@ pedals) mapped onto the same virtual controller.
 
 Hold Tab, or press RB+Back, for a card of all of it in the game.
 
-On the pad, the simple layout, once the engine is running (the default; F7
-switches to the classic layout below, and it is remembered as `[controls]
-scheme` in `titaniumlegion.ini`):
+On the pad, Easy Pilot, once the engine is running. It is on by default. Turn
+it off for the classic layout below, without the prompts, on the title card, in
+the F10 settings or with F7; the choice is remembered as `[controls] scheme` in
+`titaniumlegion.ini`.
 
 | Pad | Controller |
 |---|---|
@@ -100,8 +102,8 @@ scheme` in `titaniumlegion.ini`):
 | Left / right stick click | Washing / Sight change |
 | Back | Multi-monitor open-close |
 
-Menus and the start-up use the classic layout, since the menus move on the
-sight-change stick.
+The start-up uses the classic layout, and the menus have their own moves (below
+the tables).
 
 On the pad, the classic layout, the fight:
 
@@ -131,7 +133,7 @@ On the keyboard, the panel:
 | Tab (hold) | The controls card |
 | F9 | Pilot view: the main monitor fills the window, without the lower panel |
 | F8 | Prompts on / off |
-| F7 | Simple / classic layout |
+| F7 | Easy Pilot on / off |
 | Shift+Backspace | Eject |
 | 6 7 8 9 0 | Toggle switches: filter control, oxygen supply, fuel flow rate, buffer material, VT location |
 | 1-5 | Comm 1-5 |
@@ -145,7 +147,10 @@ On the keyboard, the panel:
 | Space | Main weapon |
 | Arrow keys | Sight-change stick (moves the menus) |
 
-In the menus, Main Weapon (A or Space) accepts and Lock On (X) goes back.
+In the menus, the left stick, the d-pad or the arrow keys move, A, Start, Enter
+or Space accepts, and X or Backspace goes back. At pilot entry, pick each letter
+of the name and press accept, go down to COMPLETE and accept, then accept the
+birth date and YES.
 
 For scripted runs, `TL_SB_SCRIPT="<ms>:<control>[+<control>][:<hold>],..."`
 (or `@file`) works the controller on a timeline. Controls are bit numbers,

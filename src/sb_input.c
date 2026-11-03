@@ -18,13 +18,15 @@
  * game is blinking for (guide_update), so the start-up can be done from the
  * pad alone, and held at the diagnostics bars it presses when they are all
  * past the marker. Tab or RB+Back shows the controls (sb_help.c), F9 or
- * RB+Start the pilot view, F8 turns the prompts off.
+ * RB+Start the pilot view, F8 turns the prompts on or off until the next run.
  *
- * That is the classic layout. The simple one (the default; F7 or
- * TL_CONTROLS=classic for the other) changes the pad once the engine runs:
+ * That is the classic layout. The simple one, Easy Pilot (the default; on the
+ * title card, in the F10 settings, F7 or TL_CONTROLS=classic for the other),
+ * changes the pad once the engine runs:
  * the left stick walks, with the gears following its travel, and pulled back
  * brakes and then reverses (drive); RT and LT are Main Weapon and Lock On, A
- * is Fire. Menus and the start-up keep the classic layout, since the game's
+ * is Fire. Easy Pilot brings the prompts with it, and off takes them away.
+ * Menus and the start-up keep the classic layout, since the game's
  * menus want the sight-change stick and Main Weapon.
  *
  * Keys come from the game's window (xbox_FramebufferKeyDown), so they only
@@ -567,6 +569,12 @@ static int simple_live(void)
     return !s_guide.classic && s_stage == S_RUNNING;
 }
 
+/* The game's menus, not a mission: its mode flag is 0 only in a mission. */
+static int in_menu(void)
+{
+    return *(const uint32_t *)(guest() + G_MODE) != 0;
+}
+
 /* `y` is the stick, -127..127: sets the gear and the pedals. */
 static void drive(int y, unsigned *middle, unsigned *right, DWORD now)
 {
@@ -628,11 +636,13 @@ static void scheme_load(void)
     char path[MAX_PATH], val[16];
     if (v && *v) {
         s_guide.classic = !_stricmp(v, "classic");
+        s_guide.hints = !s_guide.classic;
         return;
     }
     ini_path(path, sizeof path);
     GetPrivateProfileStringA("controls", "scheme", "simple", val, sizeof val, path);
     s_guide.classic = !_stricmp(val, "classic");
+    s_guide.hints = !s_guide.classic;
 }
 
 static void scheme_save(void)
@@ -640,6 +650,26 @@ static void scheme_save(void)
     char path[MAX_PATH];
     ini_path(path, sizeof path);
     WritePrivateProfileStringA("controls", "scheme", s_guide.classic ? "classic" : "simple", path);
+}
+
+static int easy_get(void)
+{
+    return !s_guide.classic;
+}
+
+static void easy_set(int on)
+{
+    s_guide.classic = !on;
+    s_guide.hints = on;
+    scheme_save();
+}
+
+/* Before the launcher, which shows the choice. */
+void tl_sb_options_init(void)
+{
+    extern void xbox_LauncherSetOption(const char *label, int (*get)(void), void (*set)(int on));
+    scheme_load();
+    xbox_LauncherSetOption("Easy Pilot", easy_get, easy_set);
 }
 
 /* ---- the report --------------------------------------------------------- */
@@ -682,10 +712,11 @@ static void sb_fill(int pad, uint8_t *report)
     unsigned left = 0, middle = 0, right = 0;
     ScriptOut sc;
     size_t i;
-    int b;
+    int b, menu;
 
     if (pad != 0)
         return;
+    menu = in_menu();
     memset(&xs, 0, sizeof xs);
     if (XInputGetState(0, &xs) == ERROR_SUCCESS)
         g = &xs.Gamepad;
@@ -695,6 +726,9 @@ static void sb_fill(int pad, uint8_t *report)
         for (i = 0; i < sizeof s_pad_map / sizeof s_pad_map[0]; i++) {
             int bit = shift ? s_pad_map[i].shifted
                     : simple_live() ? s_pad_map[i].simple : s_pad_map[i].bit;
+            /* The menus take the d-pad as the stick, below. */
+            if (menu && !shift && (s_pad_map[i].button & (XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_RIGHT)))
+                continue;
             if ((g->wButtons & s_pad_map[i].button) && bit >= 0)
                 set_bit(report, bit);
         }
@@ -710,6 +744,16 @@ static void sb_fill(int pad, uint8_t *report)
             aim_x = stick(g->sThumbRX);
             aim_y = stick(g->sThumbRY);
         }
+        /* The menus move on the sight-change stick, across too: the name
+         * grid at pilot entry needs it. */
+        if (menu && !shift) {
+            sight_x = rot;
+            rot = 0;
+            if (g->wButtons & XINPUT_GAMEPAD_DPAD_LEFT)  sight_x = -127;
+            if (g->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) sight_x = 127;
+            if (g->wButtons & XINPUT_GAMEPAD_DPAD_UP)    sight_y = 127;
+            if (g->wButtons & XINPUT_GAMEPAD_DPAD_DOWN)  sight_y = -127;
+        }
         if (g->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER)
             left = 0xFFFF;
         if (!simple_live()) {
@@ -723,12 +767,14 @@ static void sb_fill(int pad, uint8_t *report)
             set_bit(report, s_key_map[i].bit);
     if (key(VK_SHIFT) && key(VK_BACK))
         set_bit(report, SB_EJECT);
+    else if (menu && key(VK_BACK))
+        set_bit(report, SB_LOCK_ON);
 
     /* The levers and dials that stay put. */
-    if (edge(0, (g && !simple_live() && (g->wButtons & XINPUT_GAMEPAD_DPAD_UP)) || key(VK_PRIOR))
+    if (edge(0, (g && !menu && !simple_live() && (g->wButtons & XINPUT_GAMEPAD_DPAD_UP)) || key(VK_PRIOR))
         && s_gear < 5)
         s_gear++;
-    if (edge(1, (g && !simple_live() && (g->wButtons & XINPUT_GAMEPAD_DPAD_DOWN)) || key(VK_NEXT))
+    if (edge(1, (g && !menu && !simple_live() && (g->wButtons & XINPUT_GAMEPAD_DPAD_DOWN)) || key(VK_NEXT))
         && s_gear > -1)
         s_gear--;
     if (edge(2, key(VK_OEM_6)))                     /* ] */
@@ -765,8 +811,7 @@ static void sb_fill(int pad, uint8_t *report)
         if (edge(11, key(VK_F8)))
             s_guide.hints = !s_guide.hints;
         if (edge(13, key(VK_F7))) {
-            s_guide.classic = !s_guide.classic;
-            scheme_save();
+            easy_set(s_guide.classic);
         }
         if (edge(12, key(VK_F9) || (shift && pad_start) || sc.view))
             s_guide.view = !s_guide.view;
@@ -776,7 +821,7 @@ static void sb_fill(int pad, uint8_t *report)
             xbox_FramebufferSetCrop(0, 0, 0, 0);
         step = step_button((pad_start && !shift) || key(VK_RETURN) || sc.step, now);
         if (step >= 0)
-            set_bit(report, step);
+            set_bit(report, menu && step == SB_START ? SB_MAIN_WEAPON : step);
         if (simple_live()) {
             int y = sc.axis[AX_DRIVE] ? sc.axis[AX_DRIVE] : g && !shift ? stick(g->sThumbLY) : 0;
             drive(y, &middle, &right, now);
@@ -885,6 +930,5 @@ void tl_sb_input_init(void)
 {
     g_xbox_sb_input_hook = sb_fill;
     g_xbox_sb_lamps_hook = sb_lamps;
-    scheme_load();
     tl_sb_help_init();
 }
